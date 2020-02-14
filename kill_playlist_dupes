@@ -1,41 +1,39 @@
 #!/usr/bin/env python3
+#
+# Delete duplicate songs in googlePlay playlists
+#   Authenticate an account
+#   Get all playlists
+#   Loop over playlists and delete duplicates (prompt before deleting)
+#
+# Original script: https://github.com/maxkirchoff/google-music-dupe-killer
 import sys
 
 from gmusicapi import Mobileclient
 
-try:
-    import credentials
-    # credentials.py is in .gitignore and can be shared with other scripts
-    username = credentials.username
-    password = credentials.password
-except ImportError:
-    username = 'username'
-    password = 'password'
+ignorePlaylists = ["test1"]
 
-try:
-    # optionally hardcode id to workaround https://github.com/simon-weber/gmusicapi/issues/408
-    android_id = credentials.android_id
-except (NameError, AttributeError):
-    android_id = Mobileclient.FROM_MAC_ADDRESS
 
 def get_dupes_in_playlist(playlist):
-   duplicate_Ids = []
-   unique_trackIds = []
-   
-   for track in playlist['tracks']:
-       if track['trackId'] not in unique_trackIds:
-           unique_trackIds.append(track['trackId'])
+    duplicate_Ids = []
+    unique_trackIds = []
 
-   for atrack in unique_trackIds:
-       count = 0
-       for btrack in playlist['tracks']:
-           #print(atrack + " b " + btrack['trackId'] )
-           if atrack == btrack['trackId'] :
-               count += 1
-               if count > 1:
-                   duplicate_Ids.append(btrack['id'])
+    # Generate a list of unique tracks
+    for track in playlist['tracks']:
+        if track['trackId'] not in unique_trackIds:
+            unique_trackIds.append(track['trackId'])
 
-   return duplicate_Ids
+    # Generate a list of duplicate tracks
+    for atrack in unique_trackIds:
+        count = 0
+        for btrack in playlist['tracks']:
+            # print(atrack + " b " + btrack['trackId'] )
+            if atrack == btrack['trackId']:
+                count += 1
+                if count > 1:
+                    duplicate_Ids.append(btrack['id'])
+
+    return duplicate_Ids
+
 
 def query_yes_no(question, default="yes"):
     """Ask a yes/no question via input() and return their answer.
@@ -47,9 +45,9 @@ def query_yes_no(question, default="yes"):
 
     The "answer" return value is one of "yes" or "no".
     """
-    valid = {"yes":True,   "y":True,  "ye":True,
-             "no":False,     "n":False}
-    if default == None:
+    valid = {"yes": True,   "y": True,  "ye": True,
+             "no": False,     "n": False}
+    if default is None:
         prompt = " [y/n] "
     elif default == "yes":
         prompt = " [Y/n] "
@@ -69,12 +67,17 @@ def query_yes_no(question, default="yes"):
         elif choice in valid:
             return valid[choice]
         else:
-            sys.stdout.write("Please respond with 'yes' or 'no' "\
+            sys.stdout.write("Please respond with 'yes' or 'no' "
                              "(or 'y' or 'n').\n")
 
 
 api = Mobileclient()
-logged_in = api.login(username, password, android_id)
+# Need to do this once to set up oauth - it returns a auth string
+# api.perform_oauth()
+# Then plug the auth string into the oauth_loging below.  It's the wrong arg
+#   but it will provide one or more device Ids that you need for the arg
+
+logged_in = api.oauth_login("a4fba5e0")
 
 if logged_in:
     print("Successfully logged in. Beginning duplicate detection process.")
@@ -82,14 +85,18 @@ if logged_in:
     all_playlists = api.get_all_user_playlist_contents()
 
     for playlist in all_playlists:
-        #if playlist['name'] == 'aaaDuplicateTest':
-        if 1==1:
+        if playlist['name'] in ignorePlaylists:
+            print("Ignoreing playlist " + playlist['name'])
+        else:
             duplicate_tracks = get_dupes_in_playlist(playlist)
             if len(duplicate_tracks) > 0:
-                if query_yes_no("Found " + str(len(duplicate_tracks)) + " duplicate tracks in playlist " + playlist['name'] + ". Delete duplicates?", "yes"):
+                if query_yes_no("Found " + str(len(duplicate_tracks)) +
+                                " duplicate tracks in playlist " +
+                                playlist['name'] + ". Delete duplicates?",
+                                "yes"):
                     deleted_track_ids = []
                     deleted_track_ids += api.remove_entries_from_playlist(duplicate_tracks)
-                    print("Successfully deleted " + str(len(deleted_track_ids)) + " tracks of " + playlist['name'] )
+                    print("Successfully deleted " + str(len(deleted_track_ids)) + " tracks of " + playlist['name'])
                 else:
                     print("Skipping " + playlist['name'])
 
